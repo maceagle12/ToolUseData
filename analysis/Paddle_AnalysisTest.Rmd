@@ -1,0 +1,3344 @@
+---
+title: "Paddle Analysis"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/andrewking/Downloads/VR_ToolUse/data")
+getwd()
+```
+
+```{r}
+
+library(tidyverse)
+library(magrittr)
+library(sjlabelled) #for labelled variables
+library(ggpubr) #for plots
+library(rstatix)
+library(emmeans)
+library(afex)
+library(effects) #to get plots of effects of different variables
+library(multcomp)
+# library(BayesFactor)
+# library(bayestestR)
+library(data.table)
+library(ggbeeswarm)
+library(plotly)
+library(dplyr)
+library(cowplot)
+
+
+```
+
+First things first, time to pull the data into appropriate data frames
+
+
+```{r}
+
+
+
+
+
+expeV <- c('V1')
+dataV1<- getDataFile(expeV)
+
+
+expeV <- c('V2')
+dataV2<- getDataFile(expeV)
+
+expeV <- c('V3')
+dataV3<- getDataFile(expeV)
+
+expeV <- c('V4') 
+dataV4<- getDataFile(expeV)
+
+# 
+# expeV<- c("V5")
+# dataV5<- getDataFile(expeV)
+
+
+
+
+
+data<- rbind(dataV1, dataV2, dataV3, dataV4)
+
+dataFilterd<- data%>%
+  filter(launch_angle_err_dir < 60 & launch_angle_err_dir > -60)%>%
+  filter(distance> 0.017)
+
+
+
+
+
+```
+
+Next, create a function to filter experiment version. Also were going to rename the tools to prevent overlap
+
+
+```{r}
+data_FIXED<- function(df){
+ # df<- df %>%
+   # mutate(tool_used = case_when(tool_used == "paddle" & df$experiment == "V1" ~ "paddle_Incongruent_Dual",
+                              #   tool_used == "paddle" & df$experiment == "V4"~ "paddle_Congruent_Dual",
+                             #    tool_used == "paddle" & df$experiment == "V2"~ "paddle_Single",
+                             #    tool_useed == "paddle_blue" &
+                             #    ))
+
+  df <- df %>%
+    mutate(experiment = case_when(experiment == "V1"~ "Motor_Incongruent",
+              experiment == "V2"~ "Single_Adaptation",
+              experiment == "V3"~ "Paddle_Control",
+              experiment == "V4" ~ "Motor_Congruent",
+              experiment == "V5" ~ "Curling_Control",
+              TRUE~ "no"))
+
+
+  
+}
+
+
+
+
+
+```
+
+
+
+```{r}
+
+ 
+data_fixed <- data_FIXED(dataFilterd)
+
+
+myCols<- c(Motor_Incongruent ="#de1834",
+           Motor_Congruent = "#ff8203",
+           Single_Adaptation = "#c200c4",
+           Paddle_Control = "#005de1")
+
+myLabels<- c( Motor_Incongruent ="Motor Incongruent",
+          Motor_Congruent = "Motor Congruent",
+           Single_Adaptation = "Single Adaptation",
+           Paddle_Control = "Paddle Control")
+
+
+```
+
+
+
+
+#Fixing Paddles
+```{r}
+
+
+data_PaddleBase<- function(df){
+  
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(expe_phase == "baseline") 
+#  filter( blockN_tool == 6)
+}
+  
+data_PaddleExposures<- function(df){
+  
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(experiment != "Single_Adaptation")%>%
+  filter(expe_phase %in% c("exposure", "reexposure")) %>%
+  filter(blockN_tool %in% c(16, 20))
+}
+
+FBlockExposures<- function(df){
+  
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(experiment != "Single_Adaptation")%>%
+  filter(expe_phase %in% c("exposure", "reexposure")) %>%
+  filter(blockN_tool %in% c(7, 20))
+}
+
+data_PaddleReexposure<- function(df){
+  
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(experiment != "Single_Adaptation")%>%
+  filter(expe_phase == "reexposure") %>%
+  filter(blockN_tool %in% c(20, 22))
+}
+
+FirstTrialExposure <- function(df){
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(expe_phase %in% c("exposure")) %>%
+  filter(blockN_tool %in% c(7))%>%
+  filter(trial_num_in_block == 1)
+  
+}
+
+LastTrialFirstBlockExposure <- function(df){
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(expe_phase %in% c("exposure")) %>%
+  filter(blockN_tool %in% c(7))%>%
+  filter(trial_num_in_block == 8)
+  
+}
+
+
+LastBlockFirstTrialExposure <- function(df){
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(expe_phase %in% c("exposure")) %>%
+  filter(blockN_tool %in% c(16))%>%
+ # filter(experiment != "Single_Adaptation")%>%
+  filter(trial_num_in_block == 1)
+  
+}
+
+
+LastTrialExposure <- function(df){
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(expe_phase %in% c("exposure")) %>%
+  filter(blockN_tool %in% c(16))%>%
+  filter(trial_num_in_block == 8)
+  
+}
+
+
+
+FSTrialExposures <- function(df){
+df<- df%>%
+  filter(grepl("paddle",tool_used))%>%
+  filter(tool_used != "paddle_blue")%>%
+  filter(experiment != "Single_Adaptation")%>%
+  filter(expe_phase %in% c("exposure", "reexposure")) %>%
+  filter(blockN_tool %in% c(7, 20))%>%
+  filter(trial_num_in_block %in% c(1,2))
+  
+}
+
+
+
+
+
+
+
+```
+
+
+
+```{r}
+#dataPaddle<- data_Paddle(data_fixed)
+
+dataPaddleBaseline<- data_PaddleBase(data_fixed)
+
+dataPaddleExposures<- data_PaddleExposures(data_fixed)
+
+dataPaddleReexposure<- data_PaddleReexposure(data_fixed)
+
+dataFBlockExposure<- FBlockExposures(data_fixed)
+
+FSExposure<- FSTrialExposures(data_fixed)
+
+
+FirstPeak<- FirstTrialExposure(data_fixed)
+LastPeak<- LastBlockFirstTrialExposure(data_fixed)
+
+FirstTrough<- LastTrialFirstBlockExposure(data_fixed)
+
+LastTrough <- LastTrialExposure(data_fixed)
+
+
+```
+
+
+#I'm making some functions for washout. 
+```{r}
+FirstBlockWashout<- function(df){
+  df<- df%>%
+    filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+   #   filter(experiment != "Paddle_Control")%>%
+      filter(expe_phase %in% c("baseline", "washout"))%>%
+      filter(blockN_tool %in% c(6, 16, 17))
+      #filter(trial_num_in_block %in% c(1, 2, 8))
+}
+InitialWashout<- function(df){
+  df<- df%>%
+    filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+    #  filter(trial_num_in_block == c(1,8))%>%
+      #filter(experiment != "Single_Adaptation")%>%
+      filter(expe_phase %in% c("washout"))%>%
+      filter(blockN_tool %in% c(16,17))
+  
+}
+
+
+
+LFBlockBaseWash<- function(df){
+  df<- df%>%
+    filter(grepl("paddle", tool_used))%>%
+     # filter(experiment != "Single_Adaptation")%>%
+     #filter(experiment != "Paddle_Control")%>%
+      filter(expe_phase %in% c("baseline", "washout"))%>%
+      filter(blockN_tool %in% c(6, 17))
+      #filter(trial_num_in_block %in% c(1, 2, 8))
+}
+```
+
+#Now let's create data frames for our key questions. First let's start with the Peak values. Since the Single Adaptation has no peaks, we're going to filter it out for some of the analysis
+```{r}
+data_Peaks<- function(df){
+  
+  df<- df%>%
+    filter(grepl("paddle", tool_used))%>%
+    filter(tool_used != "paddle_blue")%>%
+    filter(expe_phase == "exposure")%>%
+    filter(trial_num_in_block == 1)%>%
+    filter(experiment != "Single_Adaptation")
+}
+
+
+
+data_Troughs<- function(df){
+  
+  df<- df%>%
+    filter(grepl("paddle", tool_used))%>%
+    filter(expe_phase == "exposure")%>%
+      filter(tool_used != "paddle_blue")%>%
+    filter(trial_num_in_block == 8)%>%
+    filter(experiment != "Single_Adaptation")
+}
+
+data_FirstLast_Trial<-  function(df){
+  df<- df%>%
+    filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+    filter(trialN_tool %in% c(65, 144))
+  #  filter(experiment != "Single_Adaptation")
+}
+
+data_FirstLast_Trial_FSLBlock<-  function(df){
+  
+  df<- df%>%
+    filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+    filter(blockN_tool %in% c(7, 8, 16))%>%
+    filter(trial_num_in_block %in% c(1, 8))%>%
+    filter(experiment != "Single_Adaptation")
+}
+
+
+data_FirstLast_Peak<-  function(df){
+  
+  df<- df%>%
+        filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+    filter(trial_num_in_block == 1)%>%
+    filter(trialN_tool %in% c(65, 137))%>%
+     filter(experiment != "Single_Adaptation")
+}
+
+data_FirstLast_Trough<-  function(df){
+  
+  df<- df%>%
+        filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+      filter(trial_num_in_block == 8)%>%
+    filter(trialN_tool %in% c(72, 144))%>%
+     filter(experiment != "Single_Adaptation")
+}
+
+data_FLTrialFirstBlock<-  function(df){
+  
+  df<- df%>%
+        filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+    filter(blockN_tool %in% c(7))%>%
+  #   filter(experiment != "Single_Adaptation")%>%
+    filter(trial_num_in_block %in% c(1, 8))
+}
+
+data_FSTrialFirstBlock<-  function(df){
+  
+  df<- df%>%
+        filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+    filter(blockN_tool %in% c(7))%>%
+     filter(experiment != "Single_Adaptation")%>%
+    filter(trial_num_in_block %in% c(1, 2))
+}
+
+data_SecTrial<-  function(df){
+  
+  df<- df%>%
+      filter(grepl("paddle", tool_used))%>%
+     filter(experiment != c("Single_Adaptation"))%>%
+    filter(trial_num_in_block %in% c(2))
+}
+
+
+data_FSTrialLastBlock<-  function(df){
+  
+  df<- df%>%
+        filter(grepl("paddle", tool_used))%>%
+    filter(blockN_tool %in% c(16))%>%
+     filter(experiment != "Single_Adaptation")%>%
+    filter(trial_num_in_block %in% c(1, 2))
+}
+
+
+data_FLTB<-  function(df){
+
+  df<- df%>%
+        filter(grepl("paddle", tool_used))%>%
+      filter(tool_used != "paddle_blue")%>%
+    filter(blockN_tool %in% c(7, 16))%>%
+     filter(experiment != "Single_Adaptation")%>%
+    filter(trial_num_in_block %in% c(1, 8))
+}
+
+
+
+data_FirstLast_Block<- function(df){
+   df<- df%>%
+             filter(grepl("paddle", tool_used))%>%
+         filter(grepl("paddle", tool_used))%>%
+    filter(blockN_tool %in% c(7,16))
+  # filter(experiment != "Single_Adaptation"
+}
+
+data_FirstBlock<- function(df){
+  
+   df<- df%>%
+         filter(grepl("paddle", tool_used))%>%
+    filter(blockN_tool %in% c(7))
+ #  filter(experiment != "Paddle_Control")
+}
+
+
+data_LastBlock<- function(df){
+  
+   df<- df%>%
+         filter(grepl("paddle", tool_used))%>%
+     filter(expe_phase == "exposure")%>%
+        filter(blockN_tool %in% c(16))
+ #  filter(experiment != "Paddle_Control")
+}
+
+
+
+
+
+```
+
+```{r}
+data_PadPeaks<- data_Peaks(data_fixed)
+
+data_PadTroughs<- data_Troughs(data_fixed)
+
+data_PadFirstLast<- data_FirstLast_Trial(data_fixed)
+
+data_PadFirLasBlock<- data_FirstLast_Block(data_fixed)
+
+data_PadFirLastBT<- data_FLTB(data_fixed)
+
+data_PadFirstLast_Peak<- data_FirstLast_Peak(data_fixed)
+
+data_FirstLast_FSLBlock<- data_FirstLast_Trial_FSLBlock(data_fixed)
+
+data_PadFirstLast_Trough<- data_FirstLast_Trough(data_fixed)
+
+WashoutEffects<- FirstBlockWashout(data_fixed)
+
+WashoutBlocks<- LFBlockBaseWash(data_fixed)
+
+
+WashoutFirstBlock<- InitialWashout(data_fixed)
+
+
+FLTrialFirstBlock<- data_FLTrialFirstBlock(data_fixed)
+
+
+FirstBlock<-data_FirstBlock(data_fixed)
+
+LastBlock<-data_LastBlock(data_fixed)
+
+
+SecTrial<- data_SecTrial(data_fixed)
+
+FSTrialLastBlock<-data_FSTrialLastBlock(data_fixed)
+
+FSTrialFirstBlock<-data_FSTrialFirstBlock(data_fixed)
+
+```
+
+
+
+
+
+
+
+
+#Baseline Last Block
+
+
+```{r}
+
+data_per_ppt <- dataPaddleBaseline %>%
+  filter(blockN_tool == 6)%>%
+  filter(launch_angle_err_dir<=60 & launch_angle_err_dir>= -60)%>%
+  mutate( 
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+#  filter(ppid != c("V2_70") & ppid!= "V4_36")
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+dodge<- position_dodge(width = 0.5)
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial #",
+    y = "Launch Angle Error (°)"
+  )  +
+  # set colour palette
+
+  # add horizontal lines
+  geom_hline(
+    yintercept = c(0, -5, 5 ), linewidth = 0.4,
+    colour = "#CCCCCC", linetype = "dashed"
+  ) +
+  # y-axis scale
+  scale_y_continuous(
+    limits = c(-15, 30),
+    breaks = c(0, -15, 15,30),
+    labels = c(0, -15, 15, 30 )
+  ) +
+  scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c(1, 2, 3, 4, 5, 6, 7, 8 , 9, 10)
+  ) +
+  # add data points
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1
+  ) +
+     geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+    geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.5, lwd = 2, position = dodge) +
+   scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  
+
+  
+  geom_point(position = dodge) 
+
+
+
+p
+
+
+```
+
+```{r}
+
+
+dataPaddleBaseline2 <- dataPaddleBaseline %>%
+  mutate( 
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid ,trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment  - (1|ppid),
+                       na.action = na.exclude,
+                       data = dataPaddleBaseline2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+
+print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+
+
+
+
+```
+
+
+#Peaks Comparisons
+```{r}
+data_per_ppt <- data_PadPeaks %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool), 
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+dodge<- position_dodge(width = 0.5)
+
+plot_Peaks <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Peak #",
+    y = NULL
+  )  +
+  # set colour palette
+
+  # add horizontal lines
+  geom_hline(
+    yintercept = c(0, 15, 30 ), linewidth = 0.4,
+    colour = "#CCCCCC", linetype = "dashed"
+  ) +
+  # y-axis scale
+  scale_y_continuous(
+     limits = c(-10, 45),
+    breaks = c(-15, 0,  15, 30, 45),
+    labels = c(-15, 0, 15, 30,45)
+  ) +
+  scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c(1, 2, 3, 4, 5, 6, 7, 8 , 9, 10)
+  ) +
+  # add data points
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.05,
+    size = 1
+  ) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+       geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.5, lwd = 2, position = dodge) +
+    scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = dodge, stroke = 0.2) +
+  ggtitle("Peaks") +
+  theme(plot.title=element_text(hjust=0.5))
+
+  #geom_line()
+
+plot_Peaks
+
+
+
+
+
+```
+
+```{r}
+
+data_PadPeaks2<- data_PadPeaks%>%
+  mutate( 
+    experiment = factor(experiment),
+    blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+  # filter(launch_angle_err_dir<=60 & launch_angle_err_dir>= -60)%>%
+   group_by(experiment, ppid , blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * blockN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = data_PadPeaks2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead")
+                       )
+summary(exp_model_lmer)
+
+ print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+(mV1 <- emmeans(exp_model_lmer, ~experiment*blockN_tool))
+tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+significant_results
+
+
+
+```
+
+#Plot for Troughs (t8) in Training
+
+```{r}
+data_per_ppt <- data_PadTroughs %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+dodge<- position_dodge(width = 0.5)
+
+
+plot_Troughs <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trough #",
+    y = NULL
+  )  +
+  # set colour palette
+
+  # add horizontal lines
+  geom_hline(
+    yintercept = c(0, 15, 30 ), linewidth = 0.4,
+    colour = "#CCCCCC", linetype = "dashed"
+  ) +
+  # y-axis scale
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+  scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c(1, 2, 3, 4, 5, 6, 7, 8 , 9, 10)
+  ) +
+  # add data points
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.05,
+    size = 1
+  ) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+     geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.5, lwd = 2, position = dodge) +
+    scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = dodge) +
+    ggtitle("Troughs") +
+  theme(plot.title=element_text(hjust=0.5))
+
+plot_Troughs
+
+
+
+
+
+
+
+
+```
+
+
+```{r}
+
+data_PadTroughs2<- data_PadTroughs%>%
+  mutate( 
+    experiment = factor(experiment),
+    blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid , blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * blockN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = data_PadTroughs2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+
+
+ print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+ 
+ #Tukey HSD Post Hoc
+ (mV1 <- emmeans(exp_model_lmer, ~experiment*blockN_tool))
+tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+
+ 
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+significant_results
+
+```
+
+
+#First and Last Trials
+
+```{r}
+data_per_ppt <- data_PadFirstLast %>% 
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, expe_phase, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+data_per_ppt$blockN_tool<- factor(data_per_ppt$expe_phase,
+                                    levels = c("exposure"),
+                                    labels = c("First and Last Block"))
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, expe_phase, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+plot_FLTrialPaddle <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial # ",
+    y = NULL
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trial", "Last Trial")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.05,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+ #       facet_wrap(. ~ expe_phase, scale = "free") +
+      scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) +
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge, stroke = 0.2) +
+ # geom_point(data = data_per_ppt,aes( x = trialN_tool, y = ppt_mn_err, colour = experiment, group = experiment, alpha = 0.1),size = 1, position =dodge) +
+  geom_line(position = nudge)+
+  ggtitle("First and Last Trial of Training") +
+  theme(plot.title=element_text(hjust=0.5))
+
+plot_FLTrialPaddle
+
+
+
+```
+
+```{r}
+data_PadFirstLast2<- data_PadFirstLast%>%
+  #filter(experiment != "Single_Adaptation")%>%
+group_by(experiment, ppid, expe_phase, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * trialN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = data_PadFirstLast2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+
+print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+ #Tukey HSD Post Hoc
+(mV1 <- emmeans(exp_model_lmer, ~experiment*trialN_tool))
+tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+
+ 
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+significant_results
+
+
+```
+
+First Last Block
+
+```{r}
+data_per_ppt <- data_PadFirLasBlock %>%
+  mutate(
+    experiment = factor(experiment),
+    blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid,expe_phase, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+
+data_per_group <- data_per_ppt %>%
+  filter(expe_phase == "exposure")%>%
+  group_by(experiment, expe_phase, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+    
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+plot_FLBlock <- data_per_group %>%
+  ggplot(
+    aes(x = blockN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Block #",
+    y = NULL
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Block", "Last Block")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.05,
+    size = 1,
+    dodge.width = 0.2) +
+       scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge, stroke = 0.2) +
+  geom_line(position = nudge)+
+  ggtitle("First and Last Block of Training") +
+  theme(plot.title=element_text(hjust=0.5))
+
+
+plot_FLBlock
+
+
+```
+
+
+```{r}
+
+data_PadFirLasBlockDA<- data_PadFirLasBlock%>%
+  #filter(experiment != "Single_Adaptation")%>%
+     group_by(experiment, ppid,expe_phase, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * blockN_tool- (1|ppid),
+                       na.action = na.exclude,
+                       data = data_PadFirLasBlockDA,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+
+
+tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+print(significant_results)
+
+
+```
+
+
+#First Last Trial First Last Block Dual adaptation
+
+```{r}
+data_per_ppt <- data_PadFirLastBT %>% 
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trial_num_in_block,trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_ppt$trial_num_in_block<- factor(data_per_ppt$trial_num_in_block,
+                                    levels = c(1, 8),
+                                    labels = c("First", "Last"))
+
+data_per_ppt<-data_per_ppt%>%
+ mutate(trial_num_in_block = case_when(trial_num_in_block == 1 & blockN_tool == 1)
+
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trial_num_in_block,trialN_tool, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+data_per_group_FL<- data_per_group%>%
+  filter(trialN_tool %in% c(65, 144))
+
+data_per_group_FLFB<- data_per_group%>%
+  filter(trialN_tool %in% c(65, 72))
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+
+
+plot_FLTBPaddle <- data_per_group_FL %>%
+  ggplot(
+    aes(x = trial_num_in_block, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial # ",
+    y = "Launch Angle Error (°)"
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trial", "Last Trial")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+#  geom_beeswarm(
+#    data = data_per_ppt,
+#    aes(
+#      y = ppt_mn_err
+#    ),
+#    alpha = 0.1,
+#    size = 1,
+#    dodge.width = 0.2
+# ) +
+#      facet_wrap(. ~ as.factor(blockN_tool), scale = "free") +
+      scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge) +
+ # geom_point(data = data_per_ppt,aes( x = trialN_tool, y = ppt_mn_err, colour = experiment, group = experiment, alpha = 0.1),size = 1, position =dodge) +
+  geom_line(position = nudge, linetype = "solid")+
+  geom_line(data = data_per_group_FLFB, aes(x = trial_num_in_block, y = mn_err
+                                                                         ), 
+            linetype = "dashed", position = nudge)+
+  geom_point(data = data_per_group_FLFB, aes(x = trial_num_in_block, y = mn_err,
+                                                                          colour = experiment), position = nudge)+
+  ggtitle("First and Last Blocks and Trials")
+
+
+
+plot_FLTBPaddle                                                         
+#ggplotly(p)
+```
+
+#First Peak, Trough, Last Peak, Trough Visualization on same graph
+
+```{r}
+data_per_ppt <- data_PadFirLastBT %>% 
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_ppt$trialN_tool<- factor(data_per_ppt$trialN_tool,
+                                    levels = c(65, 72, 137,144),
+                                    labels = c("First Peak", 
+                                               "First Trough", 
+                                               "Last Peak",
+                                               "Last Trough"))
+
+
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+
+
+plot_FLTBPaddle <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial # ",
+    y = "Launch Angle Error (°)"
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trial", "Last Trial")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = dodge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+      facet_wrap(. ~ as.factor(trialN_tool), scale = "free") +
+      scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = dodge) 
+ # geom_point(data = data_per_ppt,aes( x = trialN_tool, y = ppt_mn_err, colour = experiment, group = experiment, alpha = 0.1),size = 1, position =dodge) +
+  #geom_line(position = nudge)
+
+
+plot_FLTBPaddle
+
+ggplotly(p)
+```
+
+
+
+#Learning rate for First, Second, and Last block for Motor Incongruent, Motor Congruent, and Control
+```{r}
+data_per_ppt <- data_FirstLast_FSLBlock %>% 
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_ppt$blockN_tool<- factor(data_per_ppt$blockN_tool,
+                                    levels = c(7, 8, 16),
+                                    labels = c("First", "Second", "Last"))
+
+
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+
+
+plot_FSLTrialPaddle <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial # ",
+    y = "Launch Angle Error (°)"
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trial", "Last Trial")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+      facet_wrap(. ~ as.factor(blockN_tool), scale = "free") +
+      scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge) +
+ # geom_point(data = data_per_ppt,aes( x = trialN_tool, y = ppt_mn_err, colour = experiment, group = experiment, alpha = 0.1),size = 1, position =dodge) +
+  geom_line(position = nudge)
+
+
+plot_FSLTrialPaddle
+
+ggplotly(p)
+```
+
+#First Last trial leaning rate in block.
+
+```{r}
+data_per_ppt <- FLTrialFirstBlock %>% 
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+  
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+
+
+plot_FLTrialBlockOne <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial # ",
+    y = "Launch Angle Error (°)"
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trial", "Last Trial")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+      scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge) +
+ # geom_point(data = data_per_ppt,aes( x = trialN_tool, y = ppt_mn_err, colour = experiment, group = experiment, alpha = 0.1),size = 1, position =dodge) +
+  geom_line(position = nudge)
+
+
+plot_FLTrialBlockOne
+
+ggplotly(p)
+```
+
+
+```{r}
+
+
+FLTrialFirstBlock2<-FLTrialFirstBlock%>%
+  #filter(experiment != "Single_Adaptation")%>%
+  group_by(experiment, ppid, trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+AOV_FLTrialFirstBlock<-aov_car(ppt_mn_err~ experiment + Error(ppid/trialN_tool), FLTrialFirstBlock2,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_FLTrialFirstBlock)
+
+(mV1 <- emmeans(AOV_FLTrialFirstBlock, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+(mTri <- emmeans(AOV_Peaks_PaddleFL, ~trialN_tool))
+print(summary(pairs(mTri), adjust = "tukey"))
+
+
+(mV1 <- emmeans(AOV_FLTrialFirstBlock, ~experiment*trialN_tool))
+print(summary(pairs(mV1), adjust = "tukey"))
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * trialN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = FLTrialFirstBlock2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+ print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+```
+#FIRST LAST TRIAL LAST BLOCK
+
+```{r}
+data_per_ppt <- LastBlock %>% 
+  filter(trial_num_in_block %in% c(1,8))%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+  
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+
+
+plot_FLTrialBlockTen <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial # ",
+    y = "Launch Angle Error (°)"
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trial", "Last Trial")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+      scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge) +
+ # geom_point(data = data_per_ppt,aes( x = trialN_tool, y = ppt_mn_err, colour = experiment, group = experiment, alpha = 0.1),size = 1, position =dodge) +
+  geom_line(position = nudge)
+
+
+plot_FLTrialBlockTen
+
+ggplotly(p)
+```
+
+```{r}
+
+
+LastBlock2<-LastBlock%>%
+  #filter(experiment != "Single_Adaptation")%>%
+  group_by(experiment, ppid, trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * trialN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = LastBlock2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+ print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+ 
+ 
+ 
+(mV1 <- emmeans(exp_model_lmer, ~experiment * trialN_tool))
+
+ 
+ tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+ 
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+print(significant_results)
+
+
+```
+
+
+
+
+
+#second trial
+
+```{r}
+data_per_ppt <- SecTrial %>%
+  filter(expe_phase== "exposure")%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+SecondTrial_Paddle <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Second trial #",
+    y = "Launch Angle Error (°)"
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c(1,2,3,4,5,6,7,8,9,10)
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+       # geom_ribbon(aes(ymin = lower_ci, max = upper_ci),
+        #          linetype = 0, alpha = 0.1) +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+  
+    scale_color_manual(name = 'Paddle', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Paddle', values = myCols, labels = myLabels) +
+  geom_point(position = nudge) +
+  geom_line(position = nudge) +
+  ggtitle("second trials of Training") +
+  theme(plot.title=element_text(hjust=0.5))
+
+
+SecondTrial_Paddle
+
+ggplotly(p)
+```
+
+```{r}
+AOV_FSTrial<-aov_car(launch_angle_err_dir~ experiment + Error(ppid/trialN_tool), SecTrial,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_FSTrial)
+
+(mV1 <- emmeans(AOV_FSTrial, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+(mTri <- emmeans(AOV_Peaks_PaddleFL, ~trialN_tool))
+print(summary(pairs(mTri), adjust = "tukey"))
+
+
+
+
+```
+
+#First Last Peak
+
+
+```{r}
+data_per_ppt <- data_PadFirstLast_Peak %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+plot_FLPeak <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Peak #",
+    y = NULL
+  )  +
+  # add data points
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45),
+    labels = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Peak", "Last Peak")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+  
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+       # geom_ribbon(aes(ymin = lower_ci, max = upper_ci),
+        #          linetype = 0, alpha = 0.1) +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.05,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+  
+    scale_color_manual(name = 'Paddle', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Paddle', values = myCols, labels = myLabels) +
+  geom_point(position = nudge, stroke = 0.2) +
+  geom_line(position = nudge) +
+  ggtitle("First and Last Peak") +
+  theme(plot.title=element_text(hjust=0.5))
+
+plot_FLPeak
+
+```
+
+```{r}
+data_PadFirstLast_Peak2<-data_PadFirstLast_Peak%>%
+  filter(experiment != "Single_Adaptation")%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * trialN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = data_PadFirstLast_Peak2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+
+
+summary(exp_model_lmer)
+
+print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+
+
+tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+print(significant_results)
+
+
+
+```
+
+
+## First Last Trough
+
+```{r}
+data_per_ppt <- data_PadFirstLast_Trough %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+plot_FLTrough <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour = experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trough #",
+    y = NULL
+  )  +
+  # add data points
+  # scale_y_continuous(
+   # limits = c(-10, 45),
+    #breaks = c(0, 15, 30, 45),
+   # labels = c(0, 15, 30, 45)
+ # ) +
+   scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(0, 15, 30, 45)
+  ) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trough", "Last Trough")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), position = nudge, alpha = 0.3, lwd = 2) +
+   geom_rect(mapping = aes(xmin = -Inf, xmax = +Inf, ymin = -3, ymax = +3), 
+                fill = 'grey85', color = NA, alpha = 0.5) + 
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+       # geom_ribbon(aes(ymin = lower_ci, max = upper_ci),
+        #          linetype = 0, alpha = 0.1) +
+  geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.05,
+    size = 1,
+  ) +
+    scale_color_manual(name = 'Paddle', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge, stroke = 0.2) +
+  geom_line(position = nudge) +
+     ggtitle("First and Last Trough") +
+  theme(plot.title=element_text(hjust=0.5))
+plot_FLTrough
+
+FLTrough<-plot_FLTrough + theme(legend.position = "none")
+
+
+ggsave("FLTrough.svg", width = 2, height = 3)
+
+ggplotly(p)
+```
+
+```{r}
+
+
+data_PadFirstLast_Trough2<-data_PadFirstLast_Trough%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * trialN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = data_PadFirstLast_Trough2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+ print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+ 
+ 
+  (mV1 <- emmeans(exp_model_lmer, ~experiment * trialN_tool))
+
+ 
+ tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+ 
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+print(significant_results)
+
+```
+#Exposure vs Reexposure (Last vs First Block)
+
+```{r}
+data_per_ppt <- dataPaddleExposures %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool, blockN_tool, expe_phase) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool, blockN_tool, expe_phase) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+
+expe_labs<- c("exposure", "reexposure")
+names(expe_labs) <- c("Last", "First")
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c( -10,0, 15, 30, 45),
+    labels = c( -10, 0, 15, 30, 45)
+  ) +
+  
+       scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c(1, 2, 3, 4, 5 ,6 ,7, 8)
+  ) +
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2, position = nudge) +
+  # add data points
+    facet_wrap(. ~ expe_phase, scale = "free") +
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+     geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = -10, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge) +
+  geom_line(position = nudge)
+
+p
+
+#ggplotly(p)
+```
+
+```{r}
+AOV_PaddleExposures<-aov_car(launch_angle_err_dir~ experiment + Error(ppid/trialN_tool), dataPaddleExposures,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_PaddleExposures)
+
+(mV1 <- emmeans(AOV_PaddleExposures, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+(mTri <- emmeans(AOV_PaddleExposures, ~trialN_tool))
+print(summary(pairs(mTri), adjust = "tukey"))
+
+
+```
+#First vs Last BLocks (Trials) of Reexposure
+
+```{r}
+data_per_ppt <- dataPaddleReexposure %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+data_per_ppt$blockN_tool<- factor(data_per_ppt$blockN_tool,
+                                    levels = c(20,22),
+                                    labels = c("First", "Last"))
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+
+
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(-10, 45),
+    breaks = c(-10, 0, 15, 30, 45),
+    labels = c(-10, 0, 15, 30, 45)
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2, position = nudge) +
+  # add data points
+
+    facet_wrap(. ~ as.factor(blockN_tool), scale = "free") +
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = -10, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_point(position = nudge) +
+  geom_line(position = nudge)
+
+#p
+
+
+#ggplotly(p)
+```
+Reexposure Phase
+```{r}
+AOV_PaddleReexposure<-aov_car(launch_angle_err_dir~ experiment + Error(ppid/trialN_tool), dataPaddleReexposure,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_PaddleReexposure)
+
+
+(mV1 <- emmeans(AOV_PaddleReexposure, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+
+(mTri <- emmeans(AOV_PaddleExposures, ~trialN_tool))
+print(summary(pairs(mTri), adjust = "tukey"))
+
+
+
+```
+#First Block of Exposure/Reexposure
+
+```{r}
+data_per_ppt <- dataFBlockExposure %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, blockN_tool, expe_phase) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment,  blockN_tool, expe_phase) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = blockN_tool, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  #theme_classic_article() +
+  labs(
+    x = "Trial",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+    dodge.width = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(-10, 40),
+    breaks = c(-10, 0, 15, 30, 45),
+    labels = c( -10, 0, 15, 30, 45)
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2, position = nudge) +
+    scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c(1, 2, 3, 4, 5, 6, 7, 8 )
+  ) +
+
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+        geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  # add data points
+      scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+    facet_wrap(. ~ expe_phase, scale = "free") +
+  geom_point(position = nudge) +
+  geom_line(position = nudge)
+
+p
+
+#ggplotly(p)
+```
+
+```{r}
+FirstBlockExposures2<-  dataFBlockExposure%>%
+  filter(tool_used != "paddle_blue")%>%
+  #filter(trial_num_in_block %in% c(1,8))%>%
+  filter(experiment != "Single_Adaptation")%>%
+   group_by(experiment, ppid, expe_phase) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+  
+
+
+AOV_Saving<-aov_car(ppt_mn_err~ experiment + Error(ppid/ expe_phase), FirstBlockExposures2,na.rm = TRUE, include_aov = TRUE)
+
+summary(AOV_Saving)
+
+(mV1 <- emmeans(AOV_Saving, ~experiment * expe_phase))
+print(summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+(mTri <- emmeans(AOV_Saving, ~trialN_tool))
+print(summary(pairs(mTri), adjust = "tukey"))
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * expe_phase  - (1|ppid),
+                       na.action = na.exclude,
+                       data = FirstBlockExposures2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+
+print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+
+
+(mV1 <- emmeans(exp_model_lmer, ~experiment * expe_phase))
+
+ 
+ tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+ tukey_results
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+print(significant_results)
+
+
+```
+
+#First Vs Second Trial Exposure and Reexposure
+
+```{r}
+data_per_ppt <- FSExposure %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool, blockN_tool, expe_phase) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool, blockN_tool, expe_phase) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = trialN_tool, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Trial",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(0, 40),
+    breaks = c(0, 15, 30),
+    labels = c( 0, 15, 30)
+  ) +
+   scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("First Trial", "Second Trial")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+  # add data points
+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+    facet_wrap(. ~ expe_phase, scale = "free") +
+
+  geom_point() +
+  geom_line()
+
+p
+
+```
+
+```{r}
+AOV_FSExposure<-aov_car(launch_angle_err_dir~ experiment + Error(ppid/ trial_num_in_block *expe_phase), FSExposure,na.rm = TRUE, include_aov = TRUE)
+view(FSExposure)
+summary(AOV_FSExposure)
+
+(mV1 <- emmeans(AOV_FSExposure, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+(mTri <- emmeans(AOV_FSExposure, ~trial_num_in_block))
+print(summary(pairs(mTri), adjust = "tukey"))
+
+
+
+```
+
+#WASHOUTOUT STUFF
+# First washout block 
+
+```{r}
+
+data_per_ppt <- WashoutFirstBlock %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool,) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+WashoutTools <- data_per_group %>%
+  ggplot(
+    aes(x = experiment, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Paddle Type",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 45),
+    breaks = c( -15,0, 15, 30,45),
+    labels = c( -15, 0, 15, 30,45)
+  ) +
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+  # add data points
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+       geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+  
+        geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_boxplot(data = data_per_ppt, aes(y = ppt_mn_err))+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) 
+
+
+WashoutTools
+
+#ggplotly(p)
+```
+
+
+#Washout Effect Baseline vs Washout
+```{r}
+data_per_ppt <- WashoutEffects %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, blockN_tool, expe_phase) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+data_per_group <- data_per_ppt %>%
+  
+  group_by(experiment, blockN_tool, expe_phase) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+plotFLBaseWash <- data_per_group %>%
+  ggplot(
+    aes(x = blockN_tool, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Block num",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.1,
+    size = 1,
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 15),
+    breaks = c(-15, -10, -5,0,5,10, 15),
+    labels = c(-15, -10,-5,  0, 5, 10, 15)
+  ) +
+      scale_x_discrete(
+    # limits = c(-35, 5),
+    labels = c("Last Block Baseline", "First Block Washout"),
+    expand = c(0.25,0)
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2,position = nudge ) +
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = -5, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = -10, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 10, linetype = 'dashed', color = 'grey40') +
+
+        geom_hline(yintercept = 5, linetype = 'dashed', color = 'grey40') +
+     #facet_wrap(. ~ expe_phase, scale = "free") +
+  
+
+  # add data points
+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+   # facet_wrap(. ~ expe_phase, scale = "free") +
+  
+  geom_point(position = nudge, stroke = 0.2) +
+  geom_line(position = nudge)
+
+ plotFLBaseWash
+#ggsave("FLBaseWash3.svg", height = 4, width = 3)
+```
+
+```{r}
+WashoutEffects2<-  WashoutEffects%>%
+  filter(tool_used != "paddle_blue")%>%
+  #filter(trial_num_in_block %in% c(1,8))%>%
+  filter(experiment != "Single_Adaptation")%>%
+   group_by(experiment, ppid, expe_phase) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+  
+
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * expe_phase  - (1|ppid),
+                       na.action = na.exclude,
+                       data = WashoutEffects2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+
+print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+
+
+(mV1 <- emmeans(exp_model_lmer, ~experiment * expe_phase))
+
+ 
+ tukey_results<- (summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+ tukey_results
+significant_results <- as.data.frame(tukey_results) %>%
+  filter(p.value < 0.05)
+print(significant_results)
+
+
+```
+
+```{r}
+
+
+WashoutFirstBlock2<-  WashoutFirstBlock%>%
+   group_by(experiment, ppid, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+exp_model_lmer <- lmerTest::lmer(ppt_mn_err ~ experiment * trialN_tool  - (1|ppid),
+                       na.action = na.exclude,
+                       data = WashoutFirstBlock2,
+                       REML = TRUE,
+                       control = lmerControl(optimizer ="Nelder_Mead"))
+
+summary(exp_model_lmer)
+
+print(anova(exp_model_lmer,ddf='Satterthwaite',type=3))
+
+
+```
+#Last block Baseine, T1 and T8 of Washout  plot
+```{r}
+
+
+AllMeansBW<- WashoutBlocks%>%
+  group_by(experiment, blockN_tool, expe_phase) %>% 
+  mutate(group = case_when( expe_phase == "baseline"~ "baseline Block",
+                            expe_phase == "washout" & trial_num_in_block== 1 ~ "first trial washout",
+                            expe_phase == "washout" & trial_num_in_block== 8~ "last trial washout",
+                            TRUE~ "other"))%>%
+  filter(group != "other")
+                            
+
+
+
+data_per_ppt <- AllMeansBW %>%
+  mutate(
+    experiment = factor(experiment),
+    trial_num_in_block = factor(trial_num_in_block),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, group, blockN_tool, expe_phase) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+
+data_per_group<- data_per_ppt%>%
+  group_by(experiment, group,  expe_phase) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+nudge<- position_nudge(x= c(.2,-.2))
+dodge<- position_dodge(width = 0.2)
+
+
+
+plotLFBlock_Washout <- data_per_group %>%
+  ggplot(
+    aes(x = group, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Block #",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+      ),
+    alpha = 0.1,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 15),
+    breaks = c(-15, -10, -5,0,5,10, 15),
+    labels = c(-15, -10,-5,  0, 5, 10, 15)
+  ) +
+     scale_x_discrete(
+    # limits = c(-35, 5),
+labels = c("LB Baseline (block)", "T1 (Washout)", "T8 (Washout")
+  ) +
+  geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = -5, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = -10, linetype = 'dashed', color = 'grey40') +
+     geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+      geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 10, linetype = 'dashed', color = 'grey40') +
+
+        geom_hline(yintercept = 5, linetype = 'dashed', color = 'grey40') +
+  
+
+  # add data points
+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+   # facet_wrap(. ~ expe_phase, scale = "free") +
+
+  geom_point() +
+  geom_line()
+plotLFBlock_Washout
+print(plotLFBlock_Washout)
+ggsave("WashoutBaselineToolsBlockTrial.svg", width = 4, height = 4)
+```
+
+
+```{r}
+
+AllMeansBW<- ungroup(AllMeansBW)
+
+AOV_Washout<-aov_car(launch_angle_err_dir~ experiment + Error(ppid/ group), AllMeansBW,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_Washout)
+
+
+
+(mV1 <- emmeans(AllMeansBW, ~group))
+print(summary(pairs(mV1), adjust = "tukey"))
+#paddle - squeegee    0.395 4.02  3   0.098  0.9278
+
+(mTri <- emmeans(AllMeansBW, ~trialN_tool))
+print(summary(pairs(mTri), adjust = "tukey"))
+
+```
+
+
+
+#First Trial plot
+```{r}
+data_per_ppt <- FirstPeak %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+FirstPeakPlot<- data_per_group %>%
+  ggplot(
+    aes(x = experiment, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Paddle Type",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank())+
+  scale_y_continuous(
+    limits = c(-15, 45),
+    breaks = c( -15,0, 15, 30, 45),
+    labels = c( -15, 0, 15, 30, 45)
+  ) +
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+  # add data points
+
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+          geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+
+
+#         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+#    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_boxplot(data = data_per_ppt, aes(y = ppt_mn_err))+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) 
+
+
+FirstPeakPlot
+
+plot_AllTools<- plot_grid(
+  FirstPeakPlot +  theme(legend.position = "none") ,
+  FirstPeakPlot_Second +  theme(legend.position = "none") , 
+  labels = c("First", "Second")
+)
+legendAll<- get_legend(FirstPeakPlot + theme(legend.position = "bottom"))
+
+plotToolsAllLegend<-plot_grid(plot_AllTools, legendAll,ncol = 1,rel_heights = c(1, .1))
+
+plotToolsAllLegend
+#ggplotly(p)
+```
+
+
+
+```{r}
+
+
+
+
+FirstPeak2<-FirstPeak%>%
+ # filter(experiment != "Single_Adaptation")%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(ppid, experiment, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+AOV_FirstPeak<-aov_car(ppt_mn_err~ experiment+ Error(ppid), FirstPeak2,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_FirstPeak)
+
+(mV1 <- emmeans(AOV_FirstPeak, ~experiment ))
+print(summary(pairs(mV1), adjust = "tukey"))
+
+```
+
+
+#Last Peak plot
+```{r}
+
+data_per_ppt <- LastPeak %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool,) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+LastPeakPlot <- data_per_group %>%
+  ggplot(
+    aes(x = experiment, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Paddle Type",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 45),
+    breaks = c( -15,0, 15, 30,45),
+    labels = c( -15, 0, 15, 30,45)
+  ) +
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+  # add data points
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+       geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+  
+        geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_boxplot(data = data_per_ppt, aes(y = ppt_mn_err))+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) 
+
+
+LastPeakPlot
+
+#ggplotly(p)
+```
+
+```{r}
+
+
+
+LastPeak2<-LastPeak%>%
+  filter(experiment != "Single_Adaptation")%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+
+AOV_LastPeak<-aov_car(ppt_mn_err~ experiment + Error(ppid), LastPeak2,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_LastPeak)
+
+(mV1 <- emmeans(AOV_LastPeak, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+
+
+
+
+
+
+
+
+
+
+```
+
+#Last Trough plot
+```{r}
+
+data_per_ppt <- LastTrough %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool,) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = experiment, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Paddle Type",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 45),
+    breaks = c( -15,0, 15, 30),
+    labels = c( -15, 0, 15, 30)
+  ) +
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+  # add data points
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_boxplot(data = data_per_ppt, aes(y = ppt_mn_err))+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) 
+
+
+p
+
+#ggplotly(p)
+```
+
+```{r}
+LastTrough2<-LastTrough%>%
+#  filter(experiment != "Single_Adaptation")%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+AOV_LastTrough<-aov_car(ppt_mn_err~ experiment + Error(ppid), LastTrough2,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_LastTrough)
+
+(mV1 <- emmeans(AOV_LastTrough, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+
+
+
+```
+
+#First Trough plot
+```{r}
+data_per_ppt <- FirstTrough %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, trialN_tool,) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = experiment, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Paddle Type",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 45),
+    breaks = c( -15,0, 15, 30),
+    labels = c( -15, 0, 15, 30)
+  ) +
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+  # add data points
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_boxplot(data = data_per_ppt, aes(y = ppt_mn_err))+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) 
+
+
+p
+
+#ggplotly(p)
+```
+
+#First Trough Analysis
+```{r}
+
+FirstTrough2<-FirstTrough%>%
+  filter(experiment != "Single_Adaptation")%>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, trialN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+AOV_FirstTrough<-aov_car(ppt_mn_err~ experiment + Error(ppid), FirstTrough2,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_FirstTrough)
+
+(mV1 <- emmeans(AOV_FirstTrough, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+
+
+
+
+summary(AOV_Washout)
+
+```
+#First Block Training plot
+```{r}
+data_per_ppt <- FirstBlock %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, blockN_tool,start_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, blockN_tool, start_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+FirstBlockPlot <- data_per_group %>%
+  ggplot(
+    aes(x = experiment, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Paddle Type",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 45),
+    breaks = c( -15,0, 15, 30,45 ),
+    labels = c( -15, 0, 15, 30,45 )
+  ) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x = element_blank())+
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+  # add data points
+      facet_wrap(. ~ as.factor(start_tool), scale = "free") +
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+    geom_hline(yintercept = 45, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_boxplot(data = data_per_ppt, aes(y = ppt_mn_err))+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) 
+
+
+FirstBlockPlot
+
+
+
+
+plot_AllTools<- plot_grid(
+  FirstBlockPlot +  theme(legend.position = "none") ,
+  FirstBlockPlot_Second +  theme(legend.position = "none") , 
+  labels = c("First", "Second")
+)
+legendAll<- get_legend(FirstPeakPlot + theme(legend.position = "bottom"))
+
+plotToolsAllLegend<-plot_grid(plot_AllTools, legendAll,ncol = 1,rel_heights = c(1, .1))
+
+plotToolsAllLegend
+
+```
+
+
+#Last Block Training plot
+```{r}
+data_per_ppt <- LastBlock %>%
+  mutate(
+    experiment = factor(experiment),
+    trialN_tool = factor(trialN_tool),
+      blockN_tool = factor(blockN_tool),
+    ppid = factor(ppid))%>%
+   group_by(experiment, ppid, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+
+data_per_group <- data_per_ppt %>%
+  group_by(experiment, blockN_tool) %>% 
+      summarise(mn_err = mean(ppt_mn_err, na.rm = TRUE),
+                sd_err = sd(ppt_mn_err, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop') %>% 
+      #95% confidence intervals
+      mutate(lower_ci = mn_err - qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)),
+             upper_ci = mn_err + qt(1 - (0.05/2), n - 1) * (sd_err / sqrt(n)))
+
+
+p <- data_per_group %>%
+  ggplot(
+    aes(x = experiment, y = mn_err, colour =experiment, group = experiment)
+  ) +
+  theme_classic_article() +
+  labs(
+    x = "Paddle Type",
+    y = "Launch Angle Error (°)"
+  )  +
+   geom_beeswarm(
+    data = data_per_ppt,
+    aes(
+      y = ppt_mn_err
+    ),
+    alpha = 0.2,
+    size = 1
+  ) +
+  scale_y_continuous(
+    limits = c(-15, 45),
+    breaks = c( -15,0, 15, 30),
+    labels = c( -15, 0, 15, 30)
+  ) +
+   geom_linerange(aes(
+    ymin = lower_ci,
+    ymax = upper_ci
+  ), alpha = 0.3, lwd = 2) +
+  # add data points
+   geom_hline(yintercept = 0, linetype = 'solid', color = 'grey40') +
+      geom_hline(yintercept = 30, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = 15, linetype = 'dashed', color = 'grey40') +
+        geom_hline(yintercept = -15, linetype = 'dashed', color = 'grey40') +
+         scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) +
+  geom_boxplot(data = data_per_ppt, aes(y = ppt_mn_err))+
+        scale_color_manual(name = 'Pair', values = myCols, labels = myLabels) + 
+    scale_fill_manual(name = 'Pair', values = myCols, labels = myLabels) 
+
+
+p
+```
+
+
+
+
+#First and last Block analysis
+```{r}
+
+FirstBlock2<- FirstBlock%>%
+    #filter(experiment != "Single_Adaptation")%>%
+     group_by(experiment,ppid, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+  
+
+
+AOV_FirstBlock<-aov_car(ppt_mn_err~ experiment   + Error(ppid), FirstBlock2,na.rm = TRUE, include_aov = TRUE)
+summary(AOV_FirstBlock)
+
+
+(mV1 <- emmeans(AOV_FirstBlock, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+
+
+ 
+
+
+LastBlock2<- LastBlock%>%
+    filter(experiment != "Single_Adaptation")%>%
+     group_by(ppid, experiment, blockN_tool) %>% 
+    summarise(ppt_mn_err = mean(launch_angle_err_dir, na.rm = TRUE),
+                ppt_sd_err = sd(launch_angle_err_dir, na.rm = TRUE),
+                n = n(),
+                .groups = 'drop')
+  
+AOV_LastBlock<-aov_car(ppt_mn_err~ experiment + Error(ppid), LastBlock2,na.rm = TRUE, include_aov = TRUE)
+
+summary(AOV_LastBlock)
+
+(mV1 <- emmeans(AOV_LastBlock, ~experiment))
+print(summary(pairs(mV1), adjust = "tukey"))
+```
+
+
+

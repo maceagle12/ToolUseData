@@ -1,0 +1,220 @@
+#TESTS for tool differences
+
+#Functions
+
+
+
+
+```{r}
+ttestPeaks_paddle<- function(df){
+  df<- df%%
+    filter(expe_phase == 'exposure')%>%
+    filter(trialN_tool == 65)
+  tool1<- df
+  t.test(data_first_pad$launch_angle_err_dir,data_last_pad$launch_angle_err_dir, na.rm = TRUE, paired =TRUE)
+  
+}
+```
+
+
+
+```{r}
+ttestFirstTrial<- function(df) {
+  # filter down to the trial of interest
+  df_sub <- df %>%
+    filter(expe_phase == "exposure", trialN_tool == 65)
+  
+  # check tools present
+  tools <- unique(df_sub$tool_used)
+  if (length(tools) != 2) stop("Expected exactly 2 tools in this dataset")
+  
+  # pivot wider so each tool has its own column
+  df_wide <- df_sub %>%
+    select(ppid, tool_used, launch_angle_err_dir) %>%
+    pivot_wider(names_from = tool_used, values_from = launch_angle_err_dir)
+  
+  # paired t-test
+  ttest <- t.test(df_wide[[tools[1]]], df_wide[[tools[2]]],
+                  paired = TRUE, na.rm = TRUE)
+  
+  return(ttest)
+}
+
+
+
+
+ttestLastTrial<- function(df) {
+  # filter down to the trial of interest
+  df_sub <- df %>%
+    filter(expe_phase == "exposure", trialN_tool == 144)
+  
+  # check tools present
+  tools <- unique(df_sub$tool_used)
+  if (length(tools) != 2) stop("Expected exactly 2 tools in this dataset")
+  
+  # pivot wider so each tool has its own column
+  df_wide <- df_sub %>%
+    select(ppid, tool_used, launch_angle_err_dir) %>%
+    pivot_wider(names_from = tool_used, values_from = launch_angle_err_dir)
+  
+  # paired t-test
+  ttest <- t.test(df_wide[[tools[1]]], df_wide[[tools[2]]],
+                  paired = TRUE, na.rm = TRUE)
+  
+  return(ttest)
+}
+
+ttest_FirstBlockExposure <- function(df) {
+
+  
+  # Filter to the block of interest
+  df_sub <- df %>%
+    filter(expe_phase == "exposure", blockN_tool == 7)
+  
+  # Compute mean per participant × tool
+  df_means <- df_sub %>%
+    group_by(ppid, tool_used) %>%
+    summarise(mean_err = mean(launch_angle_err_dir, na.rm = TRUE), .groups = "drop")
+  
+  # Check which tools are present
+  tools <- unique(df_means$tool_used)
+  if (length(tools) != 2) stop("Expected exactly 2 tools in this block.")
+  
+  # Wide format: one column per tool
+  df_wide <- df_means %>%
+    pivot_wider(names_from = tool_used, values_from = mean_err)
+  
+  # Paired t-test
+  ttest <- t.test(df_wide[[tools[1]]], df_wide[[tools[2]]],
+                  paired = TRUE, na.rm = TRUE)
+  
+  return(ttest)
+}
+ttest_FirstBlockWashout <- function(df) {
+  library(dplyr)
+  library(tidyr)
+  
+  # Filter to the block of interest
+  df_sub <- df %>%
+    filter(expe_phase == "washout", blockN_tool == 17)
+  
+  # Compute mean per participant × tool
+  df_means <- df_sub %>%
+    group_by(ppid, tool_used) %>%
+    summarise(mean_err = mean(launch_angle_err_dir, na.rm = TRUE), .groups = "drop")
+  
+  # Check which tools are present
+  tools <- unique(df_means$tool_used)
+  if (length(tools) != 2) stop("Expected exactly 2 tools in this block.")
+  
+  # Wide format: one column per tool
+  df_wide <- df_means %>%
+    pivot_wider(names_from = tool_used, values_from = mean_err)
+  
+  # Paired t-test
+  ttest <- t.test(df_wide[[tools[1]]], df_wide[[tools[2]]],
+                  paired = TRUE, na.rm = TRUE)
+  
+  return(ttest)
+}
+
+ttest_LastBlockBaseline <- function(df) {
+  library(dplyr)
+  library(tidyr)
+  
+  # Filter to the block of interest
+  df_sub <- df %>%
+    filter(expe_phase == "baseline", blockN_tool == 6)
+  
+  # Compute mean per participant × tool
+  df_means <- df_sub %>%
+    group_by(ppid, tool_used) %>%
+    summarise(mean_err = mean(launch_angle_err_dir, na.rm = TRUE), .groups = "drop")
+  
+  # Check which tools are present
+  tools <- unique(df_means$tool_used)
+  if (length(tools) != 2) stop("Expected exactly 2 tools in this block.")
+  
+  # Wide format: one column per tool
+  df_wide <- df_means %>%
+    pivot_wider(names_from = tool_used, values_from = mean_err)
+  
+  # Paired t-test
+  ttest <- t.test(df_wide[[tools[1]]], df_wide[[tools[2]]],
+                  paired = TRUE, na.rm = TRUE)
+  
+  return(ttest)
+}
+
+
+
+```
+
+
+
+
+#Motor Incongruent
+```{r}
+
+ttestPeaks_paddle(dataV1)
+
+ttest_FirstBlockExposure(dataV1)
+
+ttestLastTrial(dataV1)
+
+ttest_FirstBlockWashout(dataV1)
+#Significant difference
+
+ttest_LastBlockBaseline(dataV1)
+```
+
+#Single Adaptation
+```{r}
+#V2
+
+ttestPeaks_paddle(dataV2)
+
+ttest_FirstBlockExposure(dataV2)
+
+ttestLastTrial(dataV2)
+
+ttest_FirstBlockWashout(dataV2)
+#significant difference
+
+ttest_LastBlockBaseline(dataV2)
+
+```
+
+#Paddle Congruent
+```{r}
+
+#V3
+ttestPeaks_paddle(dataV3)
+
+ttest_FirstBlockExposure(dataV3)
+
+ttestLastTrial(dataV3)
+
+ttest_FirstBlockWashout(dataV3)
+
+ttest_LastBlockBaseline(dataV3)
+
+```
+
+#Motor Congruent
+```{r}
+
+
+ttestPeaks_paddle(dataV4)
+
+ttest_FirstBlockExposure(dataV4)
+
+ttestLastTrial(dataV4)
+#significant diffrerence 
+
+ttest_FirstBlockWashout(dataV4)
+
+ttest_LastBlockBaseline(dataV4)
+```
+
+
